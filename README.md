@@ -1,48 +1,221 @@
-1. chain_of_custody.sh (Motor de Auditoría Forense)
-Descripción: Este script actúa como el núcleo de trazabilidad forense del sistema. Su función es generar registros de auditoría estructurados en formato JSON cada vez que ocurre un evento crítico (como una restauración automática). Utiliza jq para estandarizar la salida, garantizando que cada evento incluya una marca temporal UTC, la identidad del usuario, la dirección IP de origen, el hash criptográfico del archivo afectado y el resultado de la operación. Propósito: Asegurar la inmutabilidad y legibilidad de la evidencia digital, facilitando el cumplimiento de normativas de protección de datos (como la Ley 21.459) y permitiendo la reconstrucción de incidentes mediante el análisis de logs.
+🔐 Sistema de Respaldo, Auditoría Forense y Self-Healing
 
-2. backup_find_restore.sh (Lógica de Auto-Recuperación / Self-Healing)
-Descripción: Es el cerebro del mecanismo de "Self-Healing". Este script se encarga de la lógica de recuperación de archivos eliminados o corruptos. Su flujo de trabajo prioriza la velocidad: primero busca una copia válida en las "Shadow Copies" locales (snapshots) para una restauración inmediata (<1 segundo); si no la encuentra, recurre a la bóveda local (/backups/vault). Antes de restaurar, calcula el hash del archivo recuperado para verificar su integridad y llama automáticamente al script de cadena de custodia para registrar el evento. Propósito: Minimizar el Tiempo Medio de Recuperación (MTTR) automatizando la restauración de disponibilidad sin intervención humana, garantizando que el archivo recuperado sea íntegro y auténtico.
+Protección avanzada de datos clínicos – Arquitectura defensiva automatizada
 
-3. custom-heal (Integración Active Response de Wazuh)
-Descripción: Este script funciona como el "lanzador" o puente entre el SIEM (Wazuh) y la lógica de recuperación del sistema. Está diseñado para recibir alertas en tiempo real desde el gestor de Wazuh (en formato JSON), extraer los metadatos relevantes (ruta del archivo eliminado, nombre de archivo) y filtrar falsos positivos. Si los criterios coinciden con un incidente de pérdida de datos, ejecuta el script backup_find_restore.sh. Propósito: Habilitar la capacidad de Respuesta Activa. Transforma a Wazuh de ser una herramienta puramente detectiva a una plataforma capaz de ejecutar acciones correctivas autónomas ante la detección de incidentes específicos.
+Este repositorio contiene una solución integral de protección de datos diseñada para entornos críticos (clínicas, PYMEs reguladas), combinando:
 
-4. backup_seguro.sh (Respaldo Inmutable y Replicación Cloud)
-Descripción: Este script automatiza el ciclo de respaldo crítico de la clínica. Ejecuta tres funciones de seguridad clave en secuencia:
-Empaquetado Local: Genera un archivo comprimido (.tar.gz) del directorio de fichas clínicas.
-Inmutabilidad Local: Aplica el atributo de "inmutabilidad" (chattr +i) al archivo de respaldo generado, impidiendo que incluso el usuario root pueda modificarlo o eliminarlo accidentalmente (protección anti-ransomware).
-Replicación Cifrada: Utiliza rclone para subir el respaldo a un repositorio remoto seguro ("boveda_segura"). El proceso está protegido contra ejecuciones simultáneas mediante flock y reporta el éxito o fallo de la operación al sistema central de auditoría (chain_of_custody.sh). Propósito: Implementar la estrategia de respaldo 3-2-1 de manera automatizada, garantizando que siempre exista una copia de los datos protegida contra alteraciones locales (inmutabilidad) y desastres físicos (nube cifrada).
-5. sombra_instantanea.service (Servicio de Snapshots Locales)
-Descripción: Define una unidad de servicio de systemd encargada de ejecutar la estrategia de respaldos locales inmutables. Utiliza el script asociado para crear copias de seguridad incrementales basadas en enlaces duros (hardlinks) (cp -al). Esto permite mantener múltiples versiones históricas de los archivos clínicos ocupando un espacio de almacenamiento mínimo, ya que solo se consumen nuevos inodos cuando los archivos son modificados. Propósito: Proporcionar una fuente de restauración local ultrarrápida y eficiente en espacio, base fundamental para que el mecanismo de Self-Healing pueda operar en milisegundos sin depender de la red externa.
+📊 Auditoría forense y cadena de custodia
 
-6. secretos.conf (Gestión de Credenciales / Bóveda Local)
-Descripción: Archivo de configuración que actúa como una "bóveda de secretos" local. Almacena variables de entorno sensibles (contraseñas de administración de Samba, claves de cifrado de Rclone y credenciales de Wazuh) fuera de los scripts y archivos de servicio. Está diseñado para ser consumido de forma segura por unidades de systemd mediante la directiva EnvironmentFile. Propósito: Prevenir la exposición de credenciales hardcoded (escritas directamente) en el código fuente de los scripts. Permite centralizar la gestión de contraseñas y, al aplicar permisos restrictivos (chmod 600), garantiza que solo el usuario root pueda leer estos secretos, cumpliendo con principios de seguridad por capas.
+♻️ Auto-recuperación (Self-Healing)
 
-7. smb.conf (Configuración Samba con Hardening y RBAC)
-Descripción: Archivo de configuración maestro del servicio de compartición de archivos. A diferencia de una configuración por defecto, esta versión implementa Hardening agresivo:
-Protocolos Seguros: Fuerza el uso mínimo de SMB2 (client/server min protocol), mitigando vulnerabilidades críticas como EternalBlue (WannaCry).
-Integridad: Activa la firma obligatoria de paquetes (server signing = mandatory) para prevenir ataques de Man-in-the-Middle.
-Segregación (RBAC): Define recursos compartidos ([fichas_clinicas], [Administracion]) accesibles únicamente por grupos de seguridad específicos (@medicos, @recepcion), implementando el principio de mínimo privilegio.
-Autenticación: Rechaza conexiones anónimas e invitados (map to guest = never), exigiendo autenticación NTLMv2. Propósito: Proveer una capa de intercambio de archivos funcional pero resiliente, aislando la información clínica de la administrativa y reduciendo la superficie de ataque lateral dentro de la red.
-8. issue.net (Banner Legal de Advertencia)
-Descripción: Archivo de sistema utilizado por el daemon SSH (y otros servicios de login) para mostrar un mensaje de advertencia antes de la autenticación. Contiene un texto legal que notifica explícitamente que el acceso es monitoreado y restringido. Propósito: Cumplir una función de disuasión psicológica y respaldo legal. Al advertir explícitamente la prohibición de acceso, se elimina la defensa de "acceso accidental" ante un eventual proceso judicial bajo la Ley de Delitos Informáticos (N.º 21.459), estableciendo que cualquier intento de intrusión es intencional y malicioso.
+🛡️ Hardening del sistema y control de accesos
 
-9. ossec.conf (Configuración Maestra de Wazuh SIEM)
-Descripción: Archivo de configuración central del gestor Wazuh, personalizado para las necesidades específicas de la clínica. A diferencia de una instalación estándar, esta configuración incluye adaptaciones críticas:
-Syscheck (FIM) Personalizado: Configurado para monitorear en tiempo real (realtime="yes") el directorio de datos sensibles /srv/samba/fichas_clinicas, reportando cambios de atributos y contenido. Se optimizó excluyendo directorios volátiles (/tmp, /var/run) para reducir ruido.
-Integración de Respuesta Activa: Define el comando cmd_custom_heal apuntando al script custom-heal, y lo vincula a la regla de alerta ID 100100 (eliminación de archivos). Esto cierra el ciclo de detección-respuesta.
-Auditoría Extendida: Incluye la ingesta de logs personalizados (<localfile>) desde /var/log/cadena_custodia.log en formato JSON, permitiendo que Wazuh indexe y correlacione los eventos de auto-recuperación generados por los scripts de auditoría.
-Optimización de Recursos: Deshabilita módulos no utilizados como cis-cat y osquery para mantener el consumo de recursos (CPU/RAM) alineado con las restricciones de hardware de una PYME. Propósito: Orquestar todos los componentes de seguridad defensiva, transformando al servidor en un sistema de detección y respuesta autónomo que prioriza la protección de los datos clínicos sobre las funciones genéricas.
+☁️ Respaldos inmutables y cifrados en la nube
 
-10. rclone.conf (Configuración de Respaldo Cifrado en Nube)
-Descripción: Archivo de configuración para Rclone que implementa la capa de replicación remota de la estrategia de respaldo 3-2-1. Define dos "remotos": uno de conexión a Google Drive y otro de tipo crypt (denominado boveda_segura) que se superpone al primero. Esta configuración asegura que todos los datos que salen de la clínica sean cifrados del lado del cliente utilizando algoritmos estándar (AES-256) antes de ser transmitidos a la nube. Propósito: Garantizar la confidencialidad de los datos sensibles (PII/PHI) en repositorios de terceros no confiables, asegurando que ni el proveedor de nube ni un atacante que comprometa la cuenta puedan leer la información médica.
-11. sombra_instantanea.service (Demonio de Snapshots en Tiempo Real)
-Descripción: Unidad de servicio de Systemd configurada para ejecutar y mantener activo el script de protección local (sombra_instantanea.sh).
-Persistencia: Utiliza la directiva Restart=always con un intervalo de 3 segundos, garantizando que el proceso de monitoreo se reinicie automáticamente ante cualquier fallo o cierre inesperado, asegurando una cobertura 24/7.
-Hardening: Implementa ProtectSystem=full, lo que monta los directorios del sistema (/usr, /boot) como "solo lectura" para este proceso, limitando el daño potencial en caso de que el servicio sea comprometido. Propósito: Mantener la capa de "Sombra Instantánea" siempre operativa en segundo plano, independiente de la sesión del usuario.
+🚨 Detección y respuesta activa con Wazuh
 
+📁 Componentes del Sistema
+1. chain_of_custody.sh – Motor de Auditoría Forense
 
-12. y 13 backup_nube.service y .timer (Orquestación de Respaldo Cloud)
-Descripción: Conjunto de unidades que automatizan la estrategia de respaldo 3-2-1 sin requerir Cron:
-backup_nube.service: Define la ejecución del script backup_seguro.sh como una tarea de tipo oneshot (ejecutar y terminar).
-backup_nube.timer: Controla la frecuencia de ejecución. Está configurado para dispararse 15 minutos después del arranque (OnBootSec=15min) para no ralentizar el inicio, y luego repetirse cada hora (OnUnitActiveSec=1h). Propósito: Garantizar que los respaldos inmutables y la replicación a la nube ocurran de forma periódica y desatendida, eliminando el factor de error humano (olvido) en la protección de datos.
+Descripción
+Script núcleo de la trazabilidad forense del sistema. Genera registros de auditoría estructurados en formato JSON ante cada evento crítico (por ejemplo, restauraciones automáticas).
+
+Incluye:
+
+🕒 Timestamp UTC
+
+👤 Usuario ejecutor
+
+🌐 IP de origen
+
+🔑 Hash criptográfico del archivo
+
+✅ Resultado de la operación
+
+Utiliza jq para estandarizar la salida y garantizar consistencia.
+
+Propósito
+Asegurar la inmutabilidad, integridad y legibilidad de la evidencia digital, facilitando:
+
+Cumplimiento normativo (Ley 21.459)
+
+Reconstrucción forense de incidentes
+
+Correlación de eventos en SIEM
+
+2. backup_find_restore.sh – Lógica de Auto-Recuperación (Self-Healing)
+
+Descripción
+Es el cerebro del sistema de auto-recuperación. Automatiza la restauración de archivos eliminados o corruptos priorizando la velocidad:
+
+🔎 Busca en snapshots locales (Shadow Copies) (<1 segundo)
+
+📦 Si no existe, recupera desde /backups/vault
+
+🔐 Verifica integridad mediante hash
+
+🧾 Registra el evento en chain_of_custody.sh
+
+Propósito
+Reducir drásticamente el MTTR (Mean Time To Recovery) sin intervención humana, garantizando que el archivo restaurado sea auténtico e íntegro.
+
+3. custom-heal – Respuesta Activa integrada con Wazuh
+
+Descripción
+Script puente entre Wazuh SIEM y la lógica de recuperación automática.
+
+Recibe alertas en tiempo real (JSON)
+
+Extrae metadatos relevantes (ruta, nombre del archivo)
+
+Filtra falsos positivos
+
+Ejecuta backup_find_restore.sh cuando corresponde
+
+Propósito
+Transformar Wazuh de una herramienta detectiva a una plataforma de respuesta autónoma, cerrando el ciclo detección → corrección.
+
+4. backup_seguro.sh – Respaldo Inmutable y Replicación en la Nube
+
+Descripción
+Automatiza el ciclo completo de respaldo crítico:
+
+📦 Empaquetado local (.tar.gz)
+
+🔒 Inmutabilidad local (chattr +i)
+
+☁️ Replicación cifrada con rclone
+
+🔐 Control de concurrencia con flock
+
+🧾 Reporte de auditoría a chain_of_custody.sh
+
+Propósito
+Implementar de forma automática la estrategia 3-2-1, protegiendo los datos contra:
+
+Ransomware
+
+Errores humanos
+
+Desastres físicos
+
+5. sombra_instantanea.service – Snapshots Locales Eficientes
+
+Descripción
+Servicio systemd que genera copias incrementales mediante hardlinks (cp -al), permitiendo múltiples versiones históricas con uso mínimo de espacio.
+
+Propósito
+Proveer restauraciones ultrarrápidas, base esencial del sistema de Self-Healing.
+
+6. secretos.conf – Bóveda Local de Credenciales
+
+Descripción
+Archivo seguro para almacenar credenciales sensibles:
+
+Contraseñas Samba
+
+Claves de cifrado Rclone
+
+Credenciales Wazuh
+
+Consumido por systemd vía EnvironmentFile.
+
+Propósito
+Eliminar credenciales hardcodeadas y aplicar seguridad por capas, con permisos restrictivos (chmod 600).
+
+7. smb.conf – Samba Hardenizado con RBAC
+
+Descripción
+Configuración avanzada de Samba con:
+
+🔐 SMB2 mínimo (mitiga EternalBlue)
+
+✍️ Firma obligatoria de paquetes
+
+👥 Control de acceso por grupos (RBAC)
+
+🚫 Sin acceso anónimo
+
+🔑 Autenticación NTLMv2
+
+Propósito
+Reducir la superficie de ataque y aislar datos clínicos bajo el principio de mínimo privilegio.
+
+8. issue.net – Banner Legal de Advertencia
+
+Descripción
+Mensaje legal mostrado antes de la autenticación SSH.
+
+Propósito
+
+Disuasión psicológica
+
+Respaldo legal ante accesos no autorizados
+
+Eliminación de la defensa de “acceso accidental”
+
+9. ossec.conf – Configuración Maestra de Wazuh SIEM
+
+Descripción
+Configuración personalizada de Wazuh:
+
+🔍 FIM en tiempo real sobre datos clínicos
+
+🔁 Respuesta Activa integrada con custom-heal
+
+🧾 Ingesta de logs JSON de auditoría
+
+⚙️ Optimización de recursos (desactiva módulos innecesarios)
+
+Propósito
+Convertir el servidor en un sistema EDR/SIEM autónomo, enfocado en la protección de datos clínicos.
+
+10. rclone.conf – Respaldo Cifrado en la Nube
+
+Descripción
+Define:
+
+Remoto Google Drive
+
+Remoto crypt (boveda_segura) sobre el anterior
+
+Cifrado AES-256 del lado del cliente.
+
+Propósito
+Garantizar la confidencialidad absoluta de datos PII/PHI en proveedores externos.
+
+11. sombra_instantanea.service – Demonio Persistente
+
+Descripción
+Servicio systemd que mantiene activo el sistema de snapshots:
+
+🔁 Restart=always (24/7)
+
+🛡️ ProtectSystem=full (hardening)
+
+Propósito
+Asegurar que la protección local esté siempre operativa, incluso ante fallos.
+
+12 & 13. backup_nube.service + backup_nube.timer – Orquestación Cloud
+
+Descripción
+Automatización sin cron:
+
+⏱️ Arranque diferido (15 min)
+
+🔁 Ejecución cada hora
+
+🔐 Respaldo inmutable + replicación cifrada
+
+Propósito
+Eliminar el factor humano y asegurar respaldos continuos y confiables.
+
+🧠 Enfoque de Seguridad
+
+Defense in Depth
+
+Zero Trust interno
+
+Automatización total
+
+Cumplimiento legal y forense
