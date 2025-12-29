@@ -1,0 +1,9 @@
+[Unit]
+Description=Ejecutar backup cada 1 hora
+
+[Timer]
+OnBootSec=15min
+OnUnitActiveSec=1h
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,18 @@
+[Unit]
+Description=Servicio Shadow Copy en Tiempo Real
+After=network.target
+
+[Service]
+Type=simple
+User=root
+Group=root
+ExecStart=/usr/local/bin/sombra_instantanea.sh
+Restart=always
+RestartSec=3
+
+# Hardening ajustado para permitir operación de root
+ProtectSystem=full
+# ProtectHome=true <-- Comentado para evitar bloqueos si usas rutas en /home
+
+[Install]
+WantedBy=multi-user.target

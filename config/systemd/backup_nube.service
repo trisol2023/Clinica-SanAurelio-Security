@@ -1,0 +1,7 @@
+[Unit]
+Description=Ejecución de Backup Seguro a Nube
+
+[Service]
+Type=oneshot
+User=root
+ExecStart=/usr/local/bin/backup_seguro.sh
